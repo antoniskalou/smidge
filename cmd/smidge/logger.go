@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -18,6 +19,27 @@ type logger interface {
 	logStatus(status smidge.MigrationStatus)
 	logMigration(event smidge.Event)
 	logError(err error)
+}
+
+type jsonError struct {
+	Code  string
+	Error string
+	Cause string `json:"Cause,omitempty"`
+}
+
+func newJsonError(err error) jsonError {
+	if cliErr, ok := errors.AsType[*cliError](err); ok {
+		return jsonError{
+			Code:  string(cliErr.code),
+			Error: cliErr.message,
+			Cause: cliErr.cause.Error(),
+		}
+	}
+
+	return jsonError{
+		Code:  string(errorCodeInternalUnknown),
+		Error: fmt.Sprint(err),
+	}
 }
 
 type jsonLogger struct {
@@ -48,7 +70,7 @@ func (l *jsonLogger) logMigration(event smidge.Event) {
 }
 
 func (l *jsonLogger) logError(err error) {
-	encodeOrPanic(l.encoder, struct{ Error string }{err.Error()})
+	encodeOrPanic(l.encoder, newJsonError(err))
 }
 
 func encodeOrPanic(enc *json.Encoder, v any) {
@@ -190,7 +212,37 @@ func (l *prettyLogger) logMigration(e smidge.Event) {
 }
 
 func (l *prettyLogger) logError(err error) {
-	fmt.Fprintf(l.stderr, "%s %v\n", errorStyle.Render("[ERR]"), err)
+	cliErr, ok := errors.AsType[*cliError](err)
+	if !ok {
+		// preserve existing behaviour for ordinary errors
+		fmt.Fprintf(l.stderr, "%s %v\n", errorStyle.Render("[ERR]"), err)
+		return
+	}
+
+	lines := []string{
+		lipgloss.JoinHorizontal(
+			lipgloss.Top,
+			errorStyle.Render("[ERR]"),
+			" ",
+			cliErr.message,
+		),
+	}
+
+	if cliErr.cause != nil {
+		lines = append(lines, renderErrorDetail(
+			"CAUSE:",
+			cliErr.cause.Error(),
+		))
+	}
+
+	if cliErr.hint != "" {
+		lines = append(lines, renderErrorDetail(
+			"HINT:",
+			cliErr.hint,
+		))
+	}
+
+	fmt.Fprintln(l.stderr, lipgloss.JoinVertical(lipgloss.Left, lines...))
 }
 
 func panicUnhandled(kind smidge.EventKind) {

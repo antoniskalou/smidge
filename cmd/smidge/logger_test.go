@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"testing"
@@ -172,7 +173,7 @@ func TestPrettyLogger(t *testing.T) {
 		}
 	})
 
-	t.Run("logError", func(t *testing.T) {
+	t.Run("logError plain", func(t *testing.T) {
 		stdout := &bytes.Buffer{}
 		stderr := &bytes.Buffer{}
 		logger := newPrettyLogger(stdout, stderr, prettyLoggerOptions{})
@@ -180,7 +181,28 @@ func TestPrettyLogger(t *testing.T) {
 		logger.logError(fmt.Errorf("something went wrong"))
 
 		t.Run("stdout", func(t *testing.T) {
-			assertSnapshot(t, stdout.String())
+			assertOutput(t, stdout, "")
+		})
+
+		t.Run("stderr", func(t *testing.T) {
+			assertSnapshot(t, stderr.String())
+		})
+	})
+
+	t.Run("logError cliError", func(t *testing.T) {
+		stdout := &bytes.Buffer{}
+		stderr := &bytes.Buffer{}
+		logger := newPrettyLogger(stdout, stderr, prettyLoggerOptions{})
+
+		logger.logError(&cliError{
+			code:    errorCodeDatabaseOpen,
+			message: "failed to open db",
+			hint:    "a hint",
+			cause:   errors.New("cause"),
+		})
+
+		t.Run("stdout", func(t *testing.T) {
+			assertOutput(t, stdout, "")
 		})
 
 		t.Run("stderr", func(t *testing.T) {
@@ -255,11 +277,22 @@ func TestJSONLogger(t *testing.T) {
 
 	t.Run("logError", func(t *testing.T) {
 		stdout := &bytes.Buffer{}
-		newJsonLogger(stdout).logError(
+		logger := newJsonLogger(stdout)
+		logger.logError(
 			fmt.Errorf("something went wrong"),
 		)
 
-		assertOutput(t, stdout, `{"Error":"something went wrong"}`+"\n")
+		assertOutput(t, stdout, `{"Code":"internal.unknown","Error":"something went wrong"}`+"\n")
+
+		stdout.Reset()
+		logger.logError(&cliError{
+			code:    errorCodeMigrationDeploy,
+			message: "failed to run migration",
+			hint:    "some hint",
+			cause:   errors.New("cause"),
+		})
+
+		assertOutput(t, stdout, `{"Code":"migration.deploy","Error":"failed to run migration","Cause":"cause"}`+"\n")
 	})
 }
 

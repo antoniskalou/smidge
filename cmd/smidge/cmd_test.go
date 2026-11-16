@@ -1,9 +1,9 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -152,10 +152,7 @@ func TestCmdStatus(t *testing.T) {
 			t.Fatal("expected an error")
 		}
 
-		if !strings.Contains(err.Error(), "failed to open db at "+path) {
-			t.Errorf("unexpected error: %v", err)
-		}
-
+		assertCliError(t, err, errorCodeDatabaseOpen)
 		assertEmptyEvents(t, logger)
 	})
 
@@ -273,9 +270,7 @@ func TestCmdDeploy(t *testing.T) {
 			t.Fatal("expected deployment error")
 		}
 
-		if !strings.Contains(err.Error(), "deploy failed:") {
-			t.Errorf("unexpected error: %v", err)
-		}
+		assertCliError(t, err, errorCodeMigrationDeploy)
 	})
 }
 
@@ -333,9 +328,7 @@ func TestCmdRollback(t *testing.T) {
 			t.Fatal("expected an error")
 		}
 
-		if !strings.Contains(err.Error(), "failed to open db at "+dbPath) {
-			t.Errorf("unexpected error: %v", err)
-		}
+		assertCliError(t, err, errorCodeDatabaseOpen)
 
 		if _, err := os.Stat(dbPath); !os.IsNotExist(err) {
 			t.Errorf("database should not have been created; error = %v", err)
@@ -366,9 +359,7 @@ func TestCmdRollback(t *testing.T) {
 			t.Fatal("expected rollback error")
 		}
 
-		if !strings.Contains(err.Error(), "rollback failed:") {
-			t.Errorf("unexpected error: %v", err)
-		}
+		assertCliError(t, err, errorCodeMigrationRollback)
 	})
 }
 
@@ -488,5 +479,18 @@ func assertEmptyEvents(t testing.TB, logger *spyLogger) {
 
 	if len(logger.events) != 0 {
 		t.Fatalf("expected empty logger events, got %d", len(logger.events))
+	}
+}
+
+func assertCliError(t testing.TB, got error, want cliErrorCode) {
+	t.Helper()
+
+	err, ok := errors.AsType[*cliError](got)
+	if !ok {
+		t.Fatalf("unexpected error type: %T", got)
+	}
+
+	if err.code != want {
+		t.Errorf("unexpected error: %v", err)
 	}
 }
