@@ -277,22 +277,40 @@ func cmdInit(ctx commandContext) error {
 	// #nosec G301 -- Migration directories are intentionally world readable.
 	err := os.MkdirAll(rootDir, 0o755)
 	if err != nil {
-		return fmt.Errorf("failed to create migration dir: %w", err)
+		return &cliError{
+			code:    errorCodeMigrationDir,
+			message: fmt.Sprintf("Could not create migration directory '%s'.", rootDir),
+			hint:    "Check that you have permissions to write at the given directory.",
+			cause:   err,
+		}
 	}
 
 	up := filepath.Join(rootDir, "001_init.up.sql")
 	if err := writeIfNotExists(up, sql); err != nil {
-		return fmt.Errorf("failed to write %s migration: %w", up, err)
+		return &cliError{
+			code:    errorCodeMigrationWrite,
+			message: fmt.Sprintf("Could not write migration file '%s'.", up),
+			cause:   err,
+		}
 	}
 
 	down := filepath.Join(rootDir, "001_init.down.sql")
 	if err := writeIfNotExists(down, sql); err != nil {
-		return fmt.Errorf("failed to write %s migration: %w", down, err)
+		return &cliError{
+			code:    errorCodeMigrationWrite,
+			message: fmt.Sprintf("Could not write migration file '%s'.", down),
+			cause:   err,
+		}
 	}
 
 	absDir, err := filepath.Abs(rootDir)
 	if err != nil {
-		return fmt.Errorf("failed to resolve migration directory: %w", err)
+		return &cliError{
+			code:    errorCodeMigrationDir,
+			message: fmt.Sprintf("Could not resolve migration directory '%s'.", rootDir),
+			hint:    "Check the path format of the migration directory.",
+			cause:   err,
+		}
 	}
 
 	ctx.logger.logInit(absDir)
@@ -303,13 +321,22 @@ func cmdInit(ctx commandContext) error {
 func cmdStatus(ctx commandContext, path string) error {
 	db, err := connectDB(path, true)
 	if err != nil {
-		return fmt.Errorf("failed to open db at %s: %w", path, err)
+		return &cliError{
+			code:    errorCodeDatabaseOpen,
+			message: fmt.Sprintf("Could not open database '%s'.", path),
+			hint:    "Check that the database file exists and that you have permission to access it.",
+			cause:   err,
+		}
 	}
 	defer func() { _ = db.Close() }()
 
 	status, err := ctx.migrator.Status(db)
 	if err != nil {
-		return fmt.Errorf("failed to get db status: %w", err)
+		return &cliError{
+			code:    errorCodeMigrationStatus,
+			message: fmt.Sprintf("Could not read migration status from database '%s'.", path),
+			cause:   err,
+		}
 	}
 
 	ctx.logger.logStatus(status)
@@ -320,7 +347,12 @@ func cmdStatus(ctx commandContext, path string) error {
 func cmdDeploy(ctx commandContext, path string, target *int) error {
 	db, err := connectDB(path, false)
 	if err != nil {
-		return fmt.Errorf("failed to open db at %s: %w", path, err)
+		return &cliError{
+			code:    errorCodeDatabaseOpen,
+			message: fmt.Sprintf("Could not open database '%s'.", path),
+			hint:    "Check that you have permission to write to the filesystem.",
+			cause:   err,
+		}
 	}
 	defer func() { _ = db.Close() }()
 
@@ -330,7 +362,11 @@ func cmdDeploy(ctx commandContext, path string, target *int) error {
 		_, err = ctx.migrator.Deploy(db, *target)
 	}
 	if err != nil {
-		return fmt.Errorf("deploy failed: %w", err)
+		return &cliError{
+			code:    errorCodeMigrationDeploy,
+			message: fmt.Sprintf("Could not deploy changes to database '%s'.", path),
+			cause:   err,
+		}
 	}
 
 	return nil
@@ -339,13 +375,22 @@ func cmdDeploy(ctx commandContext, path string, target *int) error {
 func cmdRollback(ctx commandContext, path string, target int) error {
 	db, err := connectDB(path, true)
 	if err != nil {
-		return fmt.Errorf("failed to open db at %s: %w", path, err)
+		return &cliError{
+			code:    errorCodeDatabaseOpen,
+			message: fmt.Sprintf("Could not open database '%s'.", path),
+			hint:    "Check that the database file exists and that you have the permission to access it.",
+			cause:   err,
+		}
 	}
 	defer func() { _ = db.Close() }()
 
 	_, err = ctx.migrator.Rollback(db, target)
 	if err != nil {
-		return fmt.Errorf("rollback failed: %w", err)
+		return &cliError{
+			code:    errorCodeMigrationRollback,
+			message: fmt.Sprintf("Could not rollback database '%s'.", path),
+			cause:   err,
+		}
 	}
 
 	return nil

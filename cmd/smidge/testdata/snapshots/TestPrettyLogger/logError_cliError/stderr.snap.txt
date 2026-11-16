@@ -1,0 +1,3 @@
+[31m[ERR][m failed to open db
+  [2mCAUSE:[m    cause      
+  [2mHINT:[m     a hint     

@@ -68,3 +68,14 @@ func renderList(
 				String(),
 		)
 }
+
+func renderErrorDetail(label, value string) string {
+	return lipgloss.NewStyle().
+		MarginLeft(indentWidth).
+		Render(
+			renderLabel(
+				faintStyle.Render(label),
+				value,
+			),
+		)
+}
